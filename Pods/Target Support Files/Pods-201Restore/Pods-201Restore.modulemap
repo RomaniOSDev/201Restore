@@ -1,0 +1,6 @@
+framework module Pods_201Restore {
+  umbrella header "Pods-201Restore-umbrella.h"
+
+  export *
+  module * { export * }
+}
