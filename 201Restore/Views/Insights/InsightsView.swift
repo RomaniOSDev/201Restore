@@ -17,6 +17,43 @@ struct InsightsView: View {
                         onBack: viewModel.goBack
                     )
 
+                    GlassCard(padding: 16, cornerRadius: 18, accent: AppColors.primary) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Weekly report")
+                                .font(.headline.weight(.bold))
+                                .foregroundStyle(AppColors.textPrimary)
+                            Text("Share a text summary of readiness, follow/skip, clearances, and top insights.")
+                                .font(.caption)
+                                .foregroundStyle(AppColors.textSecondary)
+                            Button("Share weekly report") {
+                                viewModel.shareWeeklyReport()
+                            }
+                            .buttonStyle(PrimaryActionStyle())
+                        }
+                    }
+                    .padding(.horizontal, 20)
+
+                    GlassCard(padding: 16, cornerRadius: 18, accent: AppColors.accent) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Followed vs not")
+                                .font(.headline.weight(.bold))
+                                .foregroundStyle(AppColors.textPrimary)
+                            Text(viewModel.followComparison.message)
+                                .font(.caption)
+                                .foregroundStyle(AppColors.textSecondary)
+                            HStack {
+                                Text("Followed \(viewModel.followComparison.followedCount) · avg \(Int(viewModel.followComparison.avgReadinessWhenFollowed))%")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(AppColors.recoveryGood)
+                                Spacer()
+                                Text("Skipped \(viewModel.followComparison.skippedCount) · avg \(Int(viewModel.followComparison.avgReadinessWhenSkipped))%")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(AppColors.recoveryPoor)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 20)
+
                     SectionHeader(title: "Meaningful streaks")
                         .padding(.horizontal, 20)
 
@@ -28,7 +65,7 @@ struct InsightsView: View {
                     }
                     .padding(.horizontal, 20)
 
-                    SectionHeader(title: "Explainable trends")
+                    SectionHeader(title: "Personal patterns")
                         .padding(.horizontal, 20)
 
                     ForEach(viewModel.insights) { insight in
@@ -52,5 +89,8 @@ struct InsightsView: View {
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .onAppear { viewModel.reload() }
+        .sheet(isPresented: $viewModel.showShare) {
+            ShareSheet(items: [viewModel.weeklyReport])
+        }
     }
 }

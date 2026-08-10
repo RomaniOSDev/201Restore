@@ -32,6 +32,22 @@ struct SessionView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(AppColors.background.opacity(0.55))
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .onChange(of: viewModel.intent) { _, _ in
+                                viewModel.intentChanged()
+                            }
+
+                            if let warning = viewModel.conflictWarning {
+                                HStack(alignment: .top, spacing: 10) {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .foregroundStyle(AppColors.recoveryPoor)
+                                    Text(warning)
+                                        .font(.caption)
+                                        .foregroundStyle(AppColors.textPrimary)
+                                }
+                                .padding(12)
+                                .background(AppColors.recoveryPoor.opacity(0.18))
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            }
 
                             TextField("Intent notes (optional)", text: $viewModel.intentNotes)
                                 .padding(12)

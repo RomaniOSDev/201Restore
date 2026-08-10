@@ -73,4 +73,5 @@ enum StorageKeys {
     static let ritualStreaks = "ritualStreaks"
     static let decisionJournal = "decisionJournal"
     static let onboardingCompleted = "onboardingCompleted"
+    static let sampleDataLoaded = "sampleDataLoaded"
 }

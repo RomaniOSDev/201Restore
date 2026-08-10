@@ -17,6 +17,18 @@ struct SettingsView: View {
                         onBack: viewModel.goBack
                     )
 
+                    SectionHeader(title: "Demo")
+                        .padding(.horizontal, 20)
+
+                    SettingsActionCell(
+                        icon: "square.and.arrow.down.fill",
+                        title: "Load Sample Data",
+                        subtitle: "12 days of entries, injuries, decisions, protocols",
+                        tint: AppColors.primary,
+                        action: viewModel.loadSampleData
+                    )
+                    .padding(.horizontal, 20)
+
                     SectionHeader(title: "About")
                         .padding(.horizontal, 20)
 
@@ -79,7 +91,7 @@ struct SettingsView: View {
                                     .foregroundStyle(AppColors.textSecondary)
                             }
                             Spacer()
-                            Text("v1.0")
+                            Text("v1.1")
                                 .font(.caption.weight(.bold))
                                 .foregroundStyle(AppColors.accent)
                                 .padding(.horizontal, 10)

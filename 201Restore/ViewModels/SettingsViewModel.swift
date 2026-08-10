@@ -8,11 +8,18 @@ final class SettingsViewModel: ObservableObject {
     @Published var showResetAlert = false
 
     private let recoveryEngine: RecoveryEngine
+    private let seedService: SeedDataService
     private weak var coordinator: AppCoordinator?
 
     init(recoveryEngine: RecoveryEngine, coordinator: AppCoordinator) {
         self.recoveryEngine = recoveryEngine
+        self.seedService = SeedDataService(engine: recoveryEngine)
         self.coordinator = coordinator
+    }
+
+    func loadSampleData() {
+        seedService.loadSampleData(replaceExisting: true)
+        coordinator?.popToRoot()
     }
 
     func resetAllData() {

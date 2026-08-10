@@ -232,39 +232,55 @@ struct DecisionReasonCell: View {
 struct ProtocolItemCell: View {
     let item: ProtocolItem
     let isDone: Bool
+    var onTimer: (() -> Void)? = nil
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            GlassCard(
-                padding: 14,
-                cornerRadius: 16,
-                accent: isDone ? AppColors.recoveryGood : AppColors.accent
-            ) {
-                HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
-                        .font(.title3)
-                        .foregroundStyle(isDone ? AppColors.recoveryGood : AppColors.textSecondary)
+        GlassCard(
+            padding: 14,
+            cornerRadius: 16,
+            accent: isDone ? AppColors.recoveryGood : AppColors.accent
+        ) {
+            VStack(alignment: .leading, spacing: 10) {
+                Button(action: action) {
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
+                            .font(.title3)
+                            .foregroundStyle(isDone ? AppColors.recoveryGood : AppColors.textSecondary)
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(item.title)
-                            .font(.subheadline.weight(.bold))
-                            .foregroundStyle(AppColors.textPrimary)
-                            .strikethrough(isDone, color: AppColors.textSecondary)
-                        Text(item.detail)
-                            .font(.caption)
-                            .foregroundStyle(AppColors.textSecondary)
-                        if item.minutes > 0 {
-                            Label("\(item.minutes) min", systemImage: "clock")
-                                .font(.caption2.weight(.medium))
-                                .foregroundStyle(AppColors.accent)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(item.title)
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(AppColors.textPrimary)
+                                .strikethrough(isDone, color: AppColors.textSecondary)
+                            Text(item.detail)
+                                .font(.caption)
+                                .foregroundStyle(AppColors.textSecondary)
+                            if item.minutes > 0 {
+                                Label("\(item.minutes) min", systemImage: "clock")
+                                    .font(.caption2.weight(.medium))
+                                    .foregroundStyle(AppColors.accent)
+                            }
                         }
+                        Spacer(minLength: 0)
                     }
-                    Spacer(minLength: 0)
+                }
+                .buttonStyle(PressableCardStyle())
+
+                if let onTimer, item.hasTimer {
+                    Button(action: onTimer) {
+                        Label("Start timer", systemImage: "timer")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppColors.primary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                            .background(AppColors.primary.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                    .buttonStyle(PressableCardStyle())
                 }
             }
         }
-        .buttonStyle(PressableCardStyle())
     }
 }
 

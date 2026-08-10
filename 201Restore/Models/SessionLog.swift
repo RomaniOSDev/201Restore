@@ -24,6 +24,14 @@ enum SessionIntent: String, CaseIterable, Codable, Hashable {
         default: return false
         }
     }
+
+    var stressedZones: [LoadZone] {
+        var zones: [LoadZone] = []
+        if involvesLower { zones.append(.lower) }
+        if involvesUpper { zones.append(.upper) }
+        if self == .fullBody || self == .match { zones.append(.core) }
+        return zones
+    }
 }
 
 struct SessionLog: Identifiable, Codable, Hashable {

@@ -12,16 +12,21 @@ final class HomeViewModel: ObservableObject {
     @Published var rituals: RitualStreaks = .empty
     @Published var topInsight: Insight?
     @Published var todaySession: SessionLog?
+    @Published var workflowSteps: [DailyWorkflowStep] = []
+    @Published var protocolBonusPreview: Int = 0
 
     private let recoveryEngine: RecoveryEngine
     private let coachingEngine: CoachingEngine
+    private let seedService: SeedDataService
     private weak var coordinator: AppCoordinator?
 
     var hasTodayEntry: Bool { todayEntry != nil }
 
-    var recoveryIndex: Double { todayEntry?.recoveryIndex ?? 0 }
+    var workflowCompletedCount: Int {
+        workflowSteps.filter(\.isComplete).count
+    }
 
-    var recoveryLevel: RecoveryLevel { todayEntry?.recoveryLevel ?? .medium }
+    var workflowTotalCount: Int { max(workflowSteps.count, 1) }
 
     var recommendation: String {
         todayDecision?.summary ?? "Log today's condition to unlock a training decision"
@@ -30,8 +35,10 @@ final class HomeViewModel: ObservableObject {
     init(recoveryEngine: RecoveryEngine, coordinator: AppCoordinator) {
         self.recoveryEngine = recoveryEngine
         self.coachingEngine = CoachingEngine(recoveryEngine: recoveryEngine)
+        self.seedService = SeedDataService(engine: recoveryEngine)
         self.coordinator = coordinator
         self.stats = recoveryEngine.getStats()
+        seedService.seedIfEmpty()
         loadData()
     }
 
@@ -47,10 +54,32 @@ final class HomeViewModel: ObservableObject {
         let decision = coachingEngine.makeTodayDecision()
         todayDecision = decision
         recoveryEngine.recordTodayDecision(decision, followed: recoveryEngine.getTodaySession()?.followedDecision)
-        protocolPercent = Int((recoveryEngine.getProtocolProgress().completionRatio * 100).rounded())
+        let progress = recoveryEngine.getProtocolProgress()
+        protocolPercent = Int((progress.completionRatio * 100).rounded())
+        protocolBonusPreview = progress.isMostlyComplete ? 5 : 0
         rituals = recoveryEngine.getRitualStreaks()
         topInsight = coachingEngine.generateInsights().first
         todaySession = recoveryEngine.getTodaySession()
+        workflowSteps = coachingEngine.dailyWorkflowSteps()
+    }
+
+    func openWorkflow(_ step: DailyWorkflowStep) {
+        switch step.kind {
+        case .logCondition:
+            if let todayEntry {
+                coordinator?.navigateToEntryForm(entry: todayEntry)
+            } else {
+                coordinator?.navigateToEntryForm()
+            }
+        case .seeDecision:
+            coordinator?.navigateToDecision()
+        case .confirmIntent:
+            coordinator?.navigateToSession()
+        case .doProtocol:
+            coordinator?.navigateToProtocol()
+        case .postCheck:
+            coordinator?.navigateToSession()
+        }
     }
 
     func addEntry() { coordinator?.navigateToEntryForm() }
@@ -65,4 +94,5 @@ final class HomeViewModel: ObservableObject {
     func goToInsights() { coordinator?.navigateToInsights() }
     func goToBodyMap() { coordinator?.navigateToBodyMap() }
     func goToWeeklyPlan() { coordinator?.navigateToWeeklyPlan() }
+    func goToGuidedRecovery() { coordinator?.navigateToGuidedRecovery() }
 }

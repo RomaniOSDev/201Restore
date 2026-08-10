@@ -19,6 +19,9 @@ struct DecisionView: View {
 
                     hero
                     readinessCard
+
+                    planBCard
+
                     SectionHeader(title: "Why this call")
                         .padding(.horizontal, 20)
                     ForEach(viewModel.decision.reasons.prefix(6)) { reason in
@@ -31,6 +34,7 @@ struct DecisionView: View {
                     zoneCard
 
                     followCard
+                    comparisonCard
                     toolsRow
                 }
                 .padding(.bottom, 28)
@@ -92,6 +96,36 @@ struct DecisionView: View {
         .padding(.horizontal, 20)
     }
 
+    private var planBCard: some View {
+        GlassCard(padding: 16, cornerRadius: 18, accent: AppColors.recoveryMedium) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("If you still train — Plan B")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(AppColors.textPrimary)
+                Text(viewModel.decision.planBTitle)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppColors.primary)
+                Text(viewModel.decision.planBDetail)
+                    .font(.caption)
+                    .foregroundStyle(AppColors.textSecondary)
+                HStack {
+                    Text("Load \(viewModel.decision.planBLoadPercent)%")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(AppColors.accent)
+                    Spacer()
+                    Text(viewModel.decision.planBSessionType.rawValue)
+                        .font(.caption)
+                        .foregroundStyle(AppColors.textSecondary)
+                }
+                Button("Start 10-min guided mobility") {
+                    viewModel.goToGuidedRecovery()
+                }
+                .buttonStyle(PrimaryActionStyle(tint: AppColors.recoveryMedium))
+            }
+        }
+        .padding(.horizontal, 20)
+    }
+
     private var zoneCard: some View {
         VStack(spacing: 10) {
             if viewModel.decision.bodyLoad.isEmpty {
@@ -124,13 +158,41 @@ struct DecisionView: View {
                     .font(.headline.weight(.bold))
                     .foregroundStyle(AppColors.textPrimary)
                 HStack(spacing: 10) {
-                    followButton("Yes", selected: viewModel.followedToday == true, tint: AppColors.recoveryGood) {
+                    followButton("Yes — followed", selected: viewModel.followedToday == true, tint: AppColors.recoveryGood) {
                         viewModel.markFollowed(true)
                     }
-                    followButton("No", selected: viewModel.followedToday == false, tint: AppColors.recoveryPoor) {
+                    followButton("Skipped", selected: viewModel.followedToday == false, tint: AppColors.recoveryPoor) {
                         viewModel.markFollowed(false)
                     }
                 }
+            }
+        }
+        .padding(.horizontal, 20)
+    }
+
+    private var comparisonCard: some View {
+        GlassCard(padding: 16, cornerRadius: 18, accent: AppColors.primary) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Followed vs skipped")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(AppColors.textPrimary)
+                HStack {
+                    MetricCell(
+                        value: "\(viewModel.followComparison.followedCount)",
+                        label: "Followed",
+                        tint: AppColors.recoveryGood,
+                        icon: "checkmark"
+                    )
+                    MetricCell(
+                        value: "\(viewModel.followComparison.skippedCount)",
+                        label: "Skipped",
+                        tint: AppColors.recoveryPoor,
+                        icon: "xmark"
+                    )
+                }
+                Text(viewModel.followComparison.message)
+                    .font(.caption)
+                    .foregroundStyle(AppColors.textSecondary)
             }
         }
         .padding(.horizontal, 20)
@@ -156,7 +218,7 @@ struct DecisionView: View {
     private func followButton(_ title: String, selected: Bool, tint: Color, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.headline.weight(.semibold))
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(AppColors.textPrimary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)

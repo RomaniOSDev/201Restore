@@ -5,6 +5,7 @@ import Combine
 final class DecisionViewModel: ObservableObject {
     @Published var decision: TrainingDecision
     @Published var followedToday: Bool?
+    @Published var followComparison: FollowComparison
 
     private let recoveryEngine: RecoveryEngine
     private let coachingEngine: CoachingEngine
@@ -16,11 +17,13 @@ final class DecisionViewModel: ObservableObject {
         self.coordinator = coordinator
         self.decision = CoachingEngine(recoveryEngine: recoveryEngine).makeTodayDecision()
         self.followedToday = recoveryEngine.getTodaySession()?.followedDecision
+        self.followComparison = CoachingEngine(recoveryEngine: recoveryEngine).followComparison()
     }
 
     func reload() {
         decision = coachingEngine.makeTodayDecision()
         followedToday = recoveryEngine.getTodaySession()?.followedDecision
+        followComparison = coachingEngine.followComparison()
         recoveryEngine.recordTodayDecision(decision, followed: followedToday)
     }
 
@@ -32,11 +35,13 @@ final class DecisionViewModel: ObservableObject {
         recoveryEngine.saveSession(session)
         recoveryEngine.recordTodayDecision(decision, followed: followed)
         followedToday = followed
+        followComparison = coachingEngine.followComparison()
     }
 
     func goToProtocol() { coordinator?.navigateToProtocol() }
     func goToSession() { coordinator?.navigateToSession() }
     func goToBodyMap() { coordinator?.navigateToBodyMap() }
+    func goToGuidedRecovery() { coordinator?.navigateToGuidedRecovery() }
     func goBack() { coordinator?.pop() }
 }
 
@@ -49,8 +54,10 @@ final class SessionViewModel: ObservableObject {
     @Published var worsened: Set<BodyPart> = []
     @Published var followedDecision = true
     @Published var isCompleted = false
+    @Published var conflictWarning: String?
 
     private let recoveryEngine: RecoveryEngine
+    private let coachingEngine: CoachingEngine
     private weak var coordinator: AppCoordinator?
     private var sessionId: UUID = UUID()
     private var createdAt: Date = Date()
@@ -62,6 +69,7 @@ final class SessionViewModel: ObservableObject {
 
     init(recoveryEngine: RecoveryEngine, coordinator: AppCoordinator) {
         self.recoveryEngine = recoveryEngine
+        self.coachingEngine = CoachingEngine(recoveryEngine: recoveryEngine)
         self.coordinator = coordinator
         if let existing = recoveryEngine.getTodaySession() {
             sessionId = existing.id
@@ -74,6 +82,11 @@ final class SessionViewModel: ObservableObject {
             followedDecision = existing.followedDecision ?? true
             isCompleted = existing.isCompleted
         }
+        conflictWarning = coachingEngine.intentConflictWarning(for: intent)
+    }
+
+    func intentChanged() {
+        conflictWarning = coachingEngine.intentConflictWarning(for: intent)
     }
 
     func toggleWorsened(_ part: BodyPart) {
@@ -95,7 +108,7 @@ final class SessionViewModel: ObservableObject {
     }
 
     private func persist(completed: Bool) {
-        let decision = CoachingEngine(recoveryEngine: recoveryEngine).makeTodayDecision()
+        let decision = coachingEngine.makeTodayDecision()
         let log = SessionLog(
             id: sessionId,
             date: Date(),
@@ -122,12 +135,26 @@ final class ProtocolViewModel: ObservableObject {
     @Published var items: [ProtocolItem] = []
     @Published var progress: DailyProtocolProgress
     @Published var decision: TrainingDecision
+    @Published var activeTimerItemId: String?
+    @Published var timerRemaining: Int = 0
+    @Published var timerRunning = false
 
     private let recoveryEngine: RecoveryEngine
     private weak var coordinator: AppCoordinator?
+    private var timer: Timer?
 
     var completionPercent: Int {
         Int((progress.completionRatio * 100).rounded())
+    }
+
+    var tomorrowBoostUnlocked: Bool {
+        progress.isMostlyComplete
+    }
+
+    var timerLabel: String {
+        let m = timerRemaining / 60
+        let s = timerRemaining % 60
+        return String(format: "%d:%02d", m, s)
     }
 
     init(recoveryEngine: RecoveryEngine, coordinator: AppCoordinator) {
@@ -151,7 +178,44 @@ final class ProtocolViewModel: ObservableObject {
         progress.itemIds = items.map(\.id)
     }
 
-    func goBack() { coordinator?.pop() }
+    func startTimer(for item: ProtocolItem) {
+        timer?.invalidate()
+        activeTimerItemId = item.id
+        timerRemaining = item.timerSeconds
+        timerRunning = true
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.tickTimer()
+            }
+        }
+    }
+
+    func stopTimer() {
+        timer?.invalidate()
+        timer = nil
+        timerRunning = false
+    }
+
+    private func tickTimer() {
+        guard timerRemaining > 0 else {
+            if let id = activeTimerItemId, !isDone(id) {
+                toggle(id)
+            }
+            stopTimer()
+            return
+        }
+        timerRemaining -= 1
+    }
+
+    func goToGuidedRecovery() { coordinator?.navigateToGuidedRecovery() }
+    func goBack() {
+        stopTimer()
+        coordinator?.pop()
+    }
+
+    deinit {
+        timer?.invalidate()
+    }
 }
 
 @MainActor
@@ -159,6 +223,9 @@ final class InsightsViewModel: ObservableObject {
     @Published var insights: [Insight] = []
     @Published var rituals: RitualStreaks = .empty
     @Published var journal: [DecisionJournalEntry] = []
+    @Published var followComparison: FollowComparison
+    @Published var weeklyReport = ""
+    @Published var showShare = false
 
     private let recoveryEngine: RecoveryEngine
     private let coachingEngine: CoachingEngine
@@ -168,6 +235,7 @@ final class InsightsViewModel: ObservableObject {
         self.recoveryEngine = recoveryEngine
         self.coachingEngine = CoachingEngine(recoveryEngine: recoveryEngine)
         self.coordinator = coordinator
+        self.followComparison = CoachingEngine(recoveryEngine: recoveryEngine).followComparison()
         reload()
     }
 
@@ -175,6 +243,13 @@ final class InsightsViewModel: ObservableObject {
         insights = coachingEngine.generateInsights()
         rituals = recoveryEngine.getRitualStreaks()
         journal = Array(recoveryEngine.getDecisionJournal().prefix(14))
+        followComparison = coachingEngine.followComparison()
+        weeklyReport = coachingEngine.weeklyReportText()
+    }
+
+    func shareWeeklyReport() {
+        weeklyReport = coachingEngine.weeklyReportText()
+        showShare = true
     }
 
     func goBack() { coordinator?.pop() }
@@ -185,6 +260,8 @@ final class BodyMapViewModel: ObservableObject {
     @Published var selected: BodyPart = .knee
     @Published var statuses: [BodyPart: BodyPartLoadStatus] = [:]
     @Published var activeInjuries: [Injury] = []
+    @Published var clearances: [ActivityClearance] = []
+    @Published var returnToPlay: [ReturnToPlayDay] = []
 
     private let recoveryEngine: RecoveryEngine
     private let coachingEngine: CoachingEngine
@@ -212,10 +289,21 @@ final class BodyMapViewModel: ObservableObject {
             map[part] = coachingEngine.canLoad(part)
         }
         statuses = map
+        clearances = coachingEngine.activityClearances()
+        if let injury = selectedInjury {
+            returnToPlay = coachingEngine.returnToPlayPlan(for: injury)
+        } else if let first = activeInjuries.first {
+            returnToPlay = coachingEngine.returnToPlayPlan(for: first)
+        } else {
+            returnToPlay = []
+        }
     }
 
     func select(_ part: BodyPart) {
         selected = part
+        if let injury = selectedInjury {
+            returnToPlay = coachingEngine.returnToPlayPlan(for: injury)
+        }
     }
 
     func goToInjuryForm() {

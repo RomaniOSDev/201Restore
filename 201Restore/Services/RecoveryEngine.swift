@@ -232,9 +232,14 @@ final class RecoveryEngine {
     func protocolItems(for date: Date = Date()) -> [ProtocolItem] {
         let entry = getEntry(for: date)
         let level = entry?.recoveryLevel ?? .medium
+        let actives = getActiveInjuries()
         return ProtocolLibrary.items(
             for: level,
-            hasActiveInjury: !getActiveInjuries().isEmpty
+            hasActiveInjury: !actives.isEmpty,
+            sleep: entry?.sleepQuality,
+            soreness: entry?.muscleSoreness,
+            fatigue: entry?.fatigue,
+            bodyParts: actives.map(\.bodyPart)
         )
     }
 
@@ -402,6 +407,7 @@ final class RecoveryEngine {
         storageService.delete(forKey: StorageKeys.protocolProgress)
         storageService.delete(forKey: StorageKeys.ritualStreaks)
         storageService.delete(forKey: StorageKeys.decisionJournal)
+        UserDefaults.standard.set(false, forKey: StorageKeys.sampleDataLoaded)
     }
 
     // MARK: - Private

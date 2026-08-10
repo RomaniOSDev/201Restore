@@ -81,4 +81,49 @@ struct TrainingDecision: Codable, Hashable {
     let bodyLoad: [BodyPartLoadStatus]
     let summary: String
     let createdAt: Date
+    let planBTitle: String
+    let planBDetail: String
+    let planBLoadPercent: Int
+    let planBSessionType: SuggestedSessionType
 }
+
+struct ActivityClearance: Identifiable, Hashable {
+    var id: String { activity }
+    let activity: String
+    let allowed: Bool
+    let advice: LoadAdvice
+    let reason: String
+}
+
+struct ReturnToPlayDay: Identifiable, Hashable {
+    var id: Int { dayOffset }
+    let dayOffset: Int
+    let title: String
+    let focus: String
+    let loadPercent: Int
+}
+
+struct FollowComparison: Hashable {
+    let followedCount: Int
+    let skippedCount: Int
+    let avgReadinessWhenFollowed: Double
+    let avgReadinessWhenSkipped: Double
+    let message: String
+}
+
+struct DailyWorkflowStep: Identifiable, Hashable {
+    enum Kind: String, Hashable {
+        case logCondition
+        case seeDecision
+        case confirmIntent
+        case doProtocol
+        case postCheck
+    }
+
+    var id: Kind { kind }
+    let kind: Kind
+    let title: String
+    let subtitle: String
+    let isComplete: Bool
+}
+

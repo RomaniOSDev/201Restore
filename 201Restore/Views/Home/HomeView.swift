@@ -9,6 +9,8 @@ struct HomeView: View {
                 VStack(spacing: 18) {
                     topBar
 
+                    dayWorkflowCard
+
                     HomeHeroBanner(
                         readiness: Int(viewModel.todayDecision?.readinessScore ?? 0),
                         decisionTitle: viewModel.todayDecision?.kind.rawValue ?? "Log to unlock call",
@@ -94,6 +96,66 @@ struct HomeView: View {
                 IconBadge(systemName: "gearshape.fill", tint: AppColors.textSecondary, size: 42)
             }
             .buttonStyle(PressableCardStyle())
+        }
+    }
+
+    private var dayWorkflowCard: some View {
+        GlassCard(padding: 16, cornerRadius: 20, accent: AppColors.primary, depth: .featured) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Today’s loop")
+                            .font(.headline.weight(.bold))
+                            .foregroundStyle(AppColors.textPrimary)
+                        Text(viewModel.workflowCompletedCount == viewModel.workflowTotalCount
+                             ? "Day complete — great coaching cycle"
+                             : "Walk the day in ~2 minutes")
+                            .font(.caption)
+                            .foregroundStyle(AppColors.textSecondary)
+                    }
+                    Spacer()
+                    Text("\(viewModel.workflowCompletedCount)/\(viewModel.workflowTotalCount)")
+                        .font(.title2.bold())
+                        .foregroundStyle(AppColors.primary)
+                }
+
+                SoftProgressBar(
+                    value: Double(viewModel.workflowCompletedCount) / Double(max(viewModel.workflowTotalCount, 1)),
+                    tint: AppColors.primary,
+                    height: 10
+                )
+
+                if viewModel.protocolBonusPreview > 0 {
+                    Text("Protocol boost unlocked: +\(viewModel.protocolBonusPreview) readiness tomorrow")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppColors.recoveryGood)
+                }
+
+                ForEach(viewModel.workflowSteps) { step in
+                    Button {
+                        viewModel.openWorkflow(step)
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: step.isComplete ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(step.isComplete ? AppColors.recoveryGood : AppColors.textSecondary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(step.title)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(AppColors.textPrimary)
+                                Text(step.subtitle)
+                                    .font(.caption2)
+                                    .foregroundStyle(AppColors.textSecondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(AppColors.textSecondary)
+                        }
+                        .padding(.vertical, 6)
+                    }
+                    .buttonStyle(PressableCardStyle())
+                }
+            }
         }
     }
 

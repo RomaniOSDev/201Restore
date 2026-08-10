@@ -14,6 +14,7 @@ enum AppRoute: Hashable {
     case insights
     case bodyMap
     case weeklyPlan
+    case guidedRecovery
 }
 
 @MainActor
@@ -86,6 +87,10 @@ final class AppCoordinator: ObservableObject {
 
     func navigateToWeeklyPlan() {
         path.append(AppRoute.weeklyPlan)
+    }
+
+    func navigateToGuidedRecovery() {
+        path.append(AppRoute.guidedRecovery)
     }
 
     func pop() {
@@ -186,6 +191,10 @@ final class AppCoordinator: ObservableObject {
                     recoveryEngine: recoveryEngine,
                     coordinator: self
                 )
+            )
+        case .guidedRecovery:
+            GuidedRecoveryView(
+                viewModel: GuidedRecoveryViewModel(coordinator: self)
             )
         }
     }

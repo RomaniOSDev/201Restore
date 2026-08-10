@@ -106,6 +106,8 @@ final class CoachingEngine {
             summary = "Protect recovery today. Rest or walk only — rebuild capacity."
         }
 
+        let planB = makePlanB(kind: kind, restricted: restricted, bodyLoad: bodyLoad)
+
         return TrainingDecision(
             kind: kind,
             readinessScore: readiness,
@@ -118,7 +120,11 @@ final class CoachingEngine {
             reasons: reasons.sorted { abs($0.impact) > abs($1.impact) },
             bodyLoad: bodyLoad,
             summary: summary,
-            createdAt: date
+            createdAt: date,
+            planBTitle: planB.title,
+            planBDetail: planB.detail,
+            planBLoadPercent: planB.load,
+            planBSessionType: planB.session
         )
     }
 
@@ -132,6 +138,149 @@ final class CoachingEngine {
             advice: .ok,
             message: "No active injury logged for \(bodyPart.rawValue)."
         )
+    }
+
+    func activityClearances() -> [ActivityClearance] {
+        let lower = worstAdvice(in: .lower)
+        let upper = worstAdvice(in: .upper)
+        let core = worstAdvice(in: .core)
+
+        return [
+            ActivityClearance(
+                activity: "Squat today?",
+                allowed: lower == .ok,
+                advice: lower,
+                reason: clearanceReason(zone: .lower, advice: lower, activity: "squats")
+            ),
+            ActivityClearance(
+                activity: "Run today?",
+                allowed: lower == .ok || lower == .limit,
+                advice: lower == .avoid ? .avoid : (lower == .limit ? .limit : .ok),
+                reason: clearanceReason(zone: .lower, advice: lower, activity: "running")
+            ),
+            ActivityClearance(
+                activity: "Press / overhead?",
+                allowed: upper != .avoid,
+                advice: upper,
+                reason: clearanceReason(zone: .upper, advice: upper, activity: "overhead pressing")
+            ),
+            ActivityClearance(
+                activity: "Twist / hinge hard?",
+                allowed: core != .avoid,
+                advice: core,
+                reason: clearanceReason(zone: .core, advice: core, activity: "heavy hinging")
+            )
+        ]
+    }
+
+    func intentConflictWarning(for intent: SessionIntent) -> String? {
+        let actives = recoveryEngine.getActiveInjuries()
+        guard !actives.isEmpty else { return nil }
+        let stressed = Set(intent.stressedZones)
+        let hits = actives.filter { stressed.contains($0.bodyPart.loadZone) && $0.painLevel >= 5 }
+        guard !hits.isEmpty else { return nil }
+        let names = hits.map { "\($0.bodyPart.rawValue) (\($0.painLevel)/10)" }.joined(separator: ", ")
+        return "\(intent.rawValue) stresses injured zones: \(names). Prefer Plan B or switch intent."
+    }
+
+    func returnToPlayPlan(for injury: Injury) -> [ReturnToPlayDay] {
+        let base = max(20, 90 - injury.painLevel * 8)
+        return [
+            ReturnToPlayDay(dayOffset: 0, title: "Day 1", focus: "Isometrics + pain-free ROM", loadPercent: max(15, base - 40)),
+            ReturnToPlayDay(dayOffset: 1, title: "Day 2", focus: "Light technique, no deep fatigue", loadPercent: max(20, base - 30)),
+            ReturnToPlayDay(dayOffset: 2, title: "Day 3", focus: "Controlled tempo, stop if pain >3", loadPercent: max(25, base - 20)),
+            ReturnToPlayDay(dayOffset: 3, title: "Day 4", focus: "Active recovery / mobility", loadPercent: max(20, base - 35)),
+            ReturnToPlayDay(dayOffset: 4, title: "Day 5", focus: "Build volume if pain stable", loadPercent: max(30, base - 10)),
+            ReturnToPlayDay(dayOffset: 5, title: "Day 6", focus: "Sport-specific drills easy", loadPercent: min(75, base)),
+            ReturnToPlayDay(dayOffset: 6, title: "Day 7", focus: "Test set or short run/play", loadPercent: min(85, base + 10))
+        ]
+    }
+
+    func followComparison() -> FollowComparison {
+        let journal = recoveryEngine.getDecisionJournal()
+        let followed = journal.filter { $0.followed == true }
+        let skipped = journal.filter { $0.followed == false }
+        let avgF = followed.isEmpty ? 0 : followed.map(\.readinessScore).reduce(0, +) / Double(followed.count)
+        let avgS = skipped.isEmpty ? 0 : skipped.map(\.readinessScore).reduce(0, +) / Double(skipped.count)
+        let message: String
+        if followed.count + skipped.count < 3 {
+            message = "Log a few follow/skip decisions to compare outcomes."
+        } else if avgF >= avgS {
+            message = "When you follow the call, next-day readiness averages \(Int(avgF))% vs \(Int(avgS))% after skips."
+        } else {
+            message = "Skips aren’t always worse yet — keep logging. Followed avg \(Int(avgF))% · skipped \(Int(avgS))%."
+        }
+        return FollowComparison(
+            followedCount: followed.count,
+            skippedCount: skipped.count,
+            avgReadinessWhenFollowed: avgF,
+            avgReadinessWhenSkipped: avgS,
+            message: message
+        )
+    }
+
+    func dailyWorkflowSteps() -> [DailyWorkflowStep] {
+        let entry = recoveryEngine.getTodayEntry()
+        let session = recoveryEngine.getTodaySession()
+        let protocolProgress = recoveryEngine.getProtocolProgress()
+        let callConfirmed = session?.followedDecision != nil
+        let intentSet = session?.intent != nil
+        let postDone = session?.isCompleted == true
+        let protocolDone = protocolProgress.isMostlyComplete
+
+        return [
+            DailyWorkflowStep(
+                kind: .logCondition,
+                title: "Log condition",
+                subtitle: entry == nil ? "Sliders unlock today’s call" : "Condition logged",
+                isComplete: entry != nil
+            ),
+            DailyWorkflowStep(
+                kind: .seeDecision,
+                title: "See today’s call",
+                subtitle: callConfirmed ? "Call confirmed (follow/skip)" : "Hard / Easy / Recovery / Rest",
+                isComplete: callConfirmed
+            ),
+            DailyWorkflowStep(
+                kind: .confirmIntent,
+                title: "Confirm intent + RPE",
+                subtitle: postDone ? "Intent + post-check done" : (intentSet ? "Add post-check RPE" : "Session plan & review"),
+                isComplete: intentSet && postDone
+            ),
+            DailyWorkflowStep(
+                kind: .doProtocol,
+                title: "Protocol checklist",
+                subtitle: protocolDone ? "75%+ done — +5 readiness tomorrow" : "\(Int(protocolProgress.completionRatio * 100))% · boosts tomorrow",
+                isComplete: protocolDone
+            )
+        ]
+    }
+
+    func weeklyReportText() -> String {
+        let stats = recoveryEngine.getStats()
+        let insights = generateInsights().prefix(3)
+        let follow = followComparison()
+        let clearances = activityClearances()
+        var lines: [String] = [
+            "Weekly Recovery Report",
+            "Entries: \(stats.totalEntries)",
+            "Avg readiness: \(Int(stats.averageRecoveryIndex))%",
+            "Current streak: \(stats.currentStreak)",
+            "Active injuries: \(stats.activeInjuries)",
+            "Followed calls: \(follow.followedCount) · Skipped: \(follow.skippedCount)",
+            follow.message,
+            "",
+            "Activity clearances:"
+        ]
+        for c in clearances {
+            lines.append("- \(c.activity) \(c.allowed ? "YES" : "NO") — \(c.reason)")
+        }
+        lines.append("")
+        lines.append("Top insights:")
+        for insight in insights {
+            lines.append("- \(insight.title): \(insight.message)")
+        }
+        return lines.joined(separator: "\n")
     }
 
     // MARK: - Insights
@@ -242,32 +391,46 @@ final class CoachingEngine {
             )
         }
 
-        // Protocol adherence
-        let progresses = recoveryEngine.getProtocolProgressList().suffix(5)
-        if progresses.count >= 3 {
-            let avg = progresses.map(\.completionRatio).reduce(0, +) / Double(progresses.count)
-            if avg >= 0.75 {
-                insights.append(
-                    Insight(
-                        title: "Protocol habit forming",
-                        message: "You completed ~\(Int(avg * 100))% of recovery tasks recently. That bonus is feeding next-day readiness.",
-                        severity: .positive,
-                        icon: "checkmark.seal.fill"
-                    )
-                )
-            } else if avg < 0.4 {
-                insights.append(
-                    Insight(
-                        title: "Protocol gap",
-                        message: "Recovery checklists are rarely finished. Completing 75%+ unlocks a readiness bonus next day.",
-                        severity: .neutral,
-                        icon: "list.bullet.clipboard"
-                    )
-                )
+        // Protocol before/after readiness
+        let progresses = recoveryEngine.getProtocolProgressList()
+        var boostedNext: [Double] = []
+        var skippedNext: [Double] = []
+        for progress in progresses {
+            guard let nextDay = calendar.date(byAdding: .day, value: 1, to: progress.date),
+                  let nextEntry = recoveryEngine.getEntry(for: nextDay) else { continue }
+            if progress.isMostlyComplete {
+                boostedNext.append(nextEntry.recoveryIndex)
+            } else if progress.completionRatio < 0.4 {
+                skippedNext.append(nextEntry.recoveryIndex)
             }
         }
+        if boostedNext.count >= 2 && skippedNext.count >= 1 {
+            let avgBoost = boostedNext.reduce(0, +) / Double(boostedNext.count)
+            let avgSkip = skippedNext.reduce(0, +) / Double(skippedNext.count)
+            let delta = Int((avgBoost - avgSkip).rounded())
+            insights.append(
+                Insight(
+                    title: "Protocol → next-day readiness",
+                    message: "After 75%+ protocol days, readiness averages \(Int(avgBoost))% vs \(Int(avgSkip))% after light protocol days (\(delta >= 0 ? "+" : "")\(delta)%).",
+                    severity: delta >= 0 ? .positive : .neutral,
+                    icon: "checkmark.seal.fill"
+                )
+            )
+        }
 
-        // Red flag: high RPE + worsened pain
+        // Follow vs skip
+        let follow = followComparison()
+        if follow.followedCount + follow.skippedCount >= 3 {
+            insights.append(
+                Insight(
+                    title: "Follow vs skip",
+                    message: follow.message,
+                    severity: .neutral,
+                    icon: "target"
+                )
+            )
+        }
+
         let risky = sessions.filter { ($0.rpe ?? 0) >= 8 && !$0.worsenedBodyParts.isEmpty }
         if risky.count >= 2 {
             insights.append(
@@ -291,7 +454,7 @@ final class CoachingEngine {
             )
         }
 
-        return insights
+        return Array(insights.prefix(8))
     }
 
     // MARK: - Soft-load week plan (extra differentiator)
@@ -414,6 +577,7 @@ final class CoachingEngine {
             }
         }
 
+        let planB = makePlanB(kind: kind, restricted: base.restrictedZones, bodyLoad: base.bodyLoad)
         return TrainingDecision(
             kind: kind,
             readinessScore: base.readinessScore,
@@ -426,8 +590,55 @@ final class CoachingEngine {
             reasons: base.reasons,
             bodyLoad: base.bodyLoad,
             summary: "Projected plan day",
-            createdAt: Date()
+            createdAt: Date(),
+            planBTitle: planB.title,
+            planBDetail: planB.detail,
+            planBLoadPercent: planB.load,
+            planBSessionType: planB.session
         )
+    }
+
+    private func makePlanB(
+        kind: TrainingDecisionKind,
+        restricted: [LoadZone],
+        bodyLoad: [BodyPartLoadStatus]
+    ) -> (title: String, detail: String, load: Int, session: SuggestedSessionType) {
+        switch kind {
+        case .trainHard:
+            if restricted.contains(.lower) {
+                return ("Plan B — Upper only", "Keep legs unloaded. Push/pull upper with crisp form.", 70, .upperOnly)
+            }
+            if restricted.contains(.upper) {
+                return ("Plan B — Lower emphasis", "Skip pressing. Squat/hinge only if pain-free.", 70, .lowerOnly)
+            }
+            return ("Plan B — Technique day", "If energy dips, cut volume 30% and chase quality reps.", 75, .skillsOnly)
+        case .trainEasy:
+            return ("Plan B — Zone 2 only", "If joints complain, switch to easy aerobic + mobility.", 40, .zone2)
+        case .activeRecovery:
+            return ("Plan B — Guided mobility", "Use the 10-min guided timer. No intensity.", 25, .mobility)
+        case .rest:
+            return ("Plan B — Walk + breathe", "If you must move: 15-min walk and box breathing only.", 15, .mobility)
+        }
+    }
+
+    private func worstAdvice(in zone: LoadZone) -> LoadAdvice {
+        let statuses = recoveryEngine.getActiveInjuries()
+            .filter { $0.bodyPart.loadZone == zone }
+            .map(loadStatus(for:))
+        if statuses.contains(where: { $0.advice == .avoid }) { return .avoid }
+        if statuses.contains(where: { $0.advice == .limit }) { return .limit }
+        return .ok
+    }
+
+    private func clearanceReason(zone: LoadZone, advice: LoadAdvice, activity: String) -> String {
+        switch advice {
+        case .ok:
+            return "No active \(zone.rawValue.lowercased()) limits — \(activity) OK if form is clean."
+        case .limit:
+            return "\(zone.rawValue) is limited — keep \(activity) easy and pain-free."
+        case .avoid:
+            return "\(zone.rawValue) flagged Avoid — skip \(activity) today."
+        }
     }
 
     private func weekdayName(_ weekday: Int) -> String {
