@@ -8,6 +8,9 @@ enum AppColors {
     static let textPrimary = Color("AppTextPrimary")
     static let textSecondary = Color("AppTextSecondary")
 
+    /// Text/icons on solid accent buttons (Loading gate)
+    static let onAccent = Color.white
+
     /// Cards / panels — same as surface
     static let card = surface
 
